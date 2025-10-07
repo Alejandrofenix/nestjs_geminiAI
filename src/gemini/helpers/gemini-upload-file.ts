@@ -1,4 +1,5 @@
 import { GoogleGenAI } from '@google/genai';
+import sharp from 'sharp';
 
 const fileMimeTypesByExtension = {
   jpg: 'image/jpg',
@@ -15,27 +16,46 @@ const fileMimeTypesByExtension = {
   pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
 };
 
+interface UploadFileOptions {
+  transformToPng?: boolean;
+}
+
 export const geminiUploadFiles = async (
   ai: GoogleGenAI,
   files: Express.Multer.File[],
+  options: UploadFileOptions = {},
 ) => {
-  console.log('Uploading files to Gemini...');
+  const { transformToPng } = options;
+
+  if (transformToPng) {
+    console.log({ transformToPng });
+    const pngUploadedFiles = await Promise.all(
+      files.map(async (file) => {
+        const buffer = await sharp(file.buffer).png().toBuffer();
+
+        return ai.files.upload({
+          file: new Blob([new Uint8Array(buffer)], {
+            type: 'image/png',
+          }),
+        });
+      }),
+    );
+
+    return pngUploadedFiles;
+  }
 
   const uploadedFiles = await Promise.all(
-
     files.map((file) => {
       const fileExtension = file.originalname.split('.').pop() ?? '';
       // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
       const fileMimeType: string =
-        fileMimeTypesByExtension[fileExtension] ?? 'image/jpg';
+        fileMimeTypesByExtension[fileExtension] ?? '';
 
       // Esto es para cuando el archivo no tiene un mime type reconocido
       const type = file.mimetype.includes('application/octet-stream')
         ? fileMimeType
         : file.mimetype;
-        console.log(file.mimetype);
-        console.log(fileMimeType);
-        console.log(file.mimetype.includes('application/octet-stream'));
+
       return ai.files.upload({
         file: new Blob([new Uint8Array(file.buffer)], {
           type,
